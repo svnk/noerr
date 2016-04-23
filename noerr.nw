@@ -1,0 +1,693 @@
+%$Id: noerr.nw,v 1.1 2003/04/16 11:42:40 sven Exp sven $
+%
+%
+%
+%
+% first extract Makefile:
+%
+%  notangle -L  -RMakefile noerr.nw > Makefile
+%
+% then do make doc
+% and xdvi noerr.dvi
+%
+%
+% if you want to edit this file, watch your emacs. If tabs are converted 
+% to spaces, the Makefile gets unusable. I extended my ~/.emacs like this:
+%
+% (add-hook 'TeX-mode-hook '(lambda() (setq indent-tabs-mode 't)
+%                                     (setq TeX-auto-untabify 'nil)))
+%
+% auctex really likes spaces :-(
+%
+\documentclass[12pt]{article}
+\usepackage{a4,noweb}
+\usepackage{psfrag}
+\newcommand{\dashlinestretch}{}
+\usepackage{pslatex}
+\pagestyle{noweb}
+\noweboptions{}
+%\addtolength{\textwidth}{-.15\textwidth}
+\setlength{\parindent}{0cm}
+\setlength{\parskip}{0.2cm}
+
+\title{noerr -- a [[#line]] parser for noweb}
+\author{Sven Kloppenburg}
+\usepackage{hyperref}
+\begin{document}
+\maketitle
+\setcounter{secnumdepth}{1}
+\tableofcontents
+\pagebreak
+
+
+\section{Introduction}
+
+You're reading the documentation for [[noerr]]. [[noerr]] is a tool, helping
+you to use noerr with programming languages that don't understand [[#line]]
+commands. I assume that you understood this sentence. If not, read about
+literate programming, noweb, and try to use it with e.g. Java.
+
+
+\section{General Description}
+
+[[noerr]] is a filter for noweb. It changes error messages from pointing to
+noweb-generated files to pointing to noweb-files. It does so by emulating the
+[[#line]] command of C as close als poosible while retaining flexibility.
+
+If you put the option -L on the noweb-commandline, it expands to \verb+#line %L "%F"%N+  
+
+This option inserts [[#line]] lines to point errors from included header-files
+back into the original. I'm going to do the same for tracing errors in
+source-files back to noweb-files. 
+
+ The [[-L]] option generates  \verb+#line %L "%F"%N+, with [[%L]] being
+replaced by the referenced line and  [[%F]] with the referenced file. This
+freely configurable. For examples look in my Makefile (Section~\ref{sec:make}).
+
+\section{Usage}
+
+If you use noweb and have perl installed, you can use [[noerr]].
+
+[[noerr]] needs the [[line]] option you use with noweb and the compiler
+output as input. The [[line]] option is [[noerr]]'s only command-line
+option. The Compiler-output comes from standard in. 
+
+\section{Example}
+
+Here is a little Java Program I used to test [[noerr]]. 
+
+<<example.java>>=
+//-*- java -*-
+<<Importe>>
+public class example
+{
+    <<Main>>
+}
+@
+
+some text
+
+<<Importe>>=
+fasel dummes Zeug;
+@
+<<Main>>=
+public static void main(String argv[])
+{
+    hier gehts schief;
+}
+@
+
+some more Text.
+
+
+\subsection{The Java-Code}
+
+A simple
+\verb+notangle -L'//line %L "%F"%N' -Rexample.java noerr.nw > example.java+
+ leads to
+
+<<the tangled example.java>>=
+//line 299 "noerr.nw"
+fasel dummes Zeug;
+//line 292 "noerr.nw"
+public class example
+{
+//line 302 "noerr.nw"
+public static void main(String argv[])
+{hier gehts schief;}
+//line 293 "noerr.nw"
+         }
+@ 
+
+Let's watch a usual compilation:
+
+<<Fehlermeldungen ohne noerr>>=
+sven@home:/home/sven/uni/noerr > javac example.java
+example.java:3: Class or interface declaration expected.
+asdkbj;
+^
+example.java:9: ';' expected.
+{hier gehts schief;}
+           ^
+2 errors                               
+@ 
+
+I've got to go to  [[example.java]] just to find the [[line]]-line telling me,
+where to look in [[noerr.nw]]. I know we can do better. Let's watch [[noerr]]
+at work:
+
+<<Compilation with noerr>>=
+cd ~/uni/noerr/
+make test
+notangle -L -RMakefile noerr.nw > Makefile
+notangle -L -Rnoerr.pl noerr.nw > noerr.pl
+notangle -L'//line %L "%F"%N' -Rexample.java noerr.nw > example.java
+javac example.java 2>&1 | perl noerr.pl -L'//line %L "%F"%N'
+noerr.nw:299: Class or interface declaration expected.
+fasel dummes Zeug;
+^
+noerr.nw:303: ';' expected.
+{hier gehts schief;}
+           ^
+2 errors
+
+Compilation finished at Wed Dec  9 20:01:08
+@ 
+
+This looks better, doesn't it?
+
+
+\subsection{example with Smalleiffel}
+\label{sec:example-with-small}
+
+<<hello-world.e>>=
+class HELLO_WORLD
+--
+-- The "Hi World program" for SmallEiffel :-)   
+--   
+-- To compile type command : compile hello_world 
+-- Run with command : a.out   
+--
+-- To compile an optimized version type : compile hello_world -boost -O2
+--
+creation make
+   
+feature
+   
+   make is
+      do
+         lalala io.put_string("Hello World.%N");
+      end;
+   
+end -- HELLO_WORLD
+
+@ 
+
+\section{Implementation}
+
+I will first present an outline for the programm which I will refine step by
+step. 
+
+For each line of input (I get comlier-output piped to standard in, remember?) I need to do three things:
+
+\begin{enumerate}
+\item recognize the error code (if there is one)
+\item compute the corrections
+\item modify and output the line
+\end{enumerate}
+
+<<noerr.pl>>=
+#$debug="TRUE";#$
+<<read [[LINE]] from stdin>>
+<<create regular expression from [[LINE]]>>
+<<define regular expressions for error codes>>
+<<modify compiler-output>>
+@ %def $debug 
+%$ for emacs - highlighting
+
+You might wonder why I  have to [[create regular expression from
+[[LINE]]]]. This is because the commandline looks like [[ -L'//line %L %F%N']]
+and the [[LINE]]s in source code look like  [[//line 299 ´´noerr.nw´´]]. 
+
+\subsection{parse the commandline}
+
+
+[[noerr]] gets the \textbf{-L} option of [[notangle]] as
+commandline-option. This is necessary because without the ability of
+recognizing [[LINE]] commands, it is impossible to trace the error back to the
+[[noweb]]-file.
+
+<<read [[LINE]] from stdin>>=
+foreach $input_part (@ARGV){
+    $input.=$input_part;
+}
+@ %def $input
+
+I rebuild the commandline. I get just one option, so there is no need for
+sophistication. Maybe later.
+
+<<read [[LINE]] from stdin>>=
+if(not ($input=~ m/-L/)){
+    die "I need -L line as option\n see also noweb(1)";
+} 
+$input=substr($input,2);
+print "$input\n" unless (! $debug);
+@
+
+
+\subsection{create regular expression from [[LINE]]}
+
+<<create regular expression from [[LINE]]>>= 
+#copy the commandline
+$line=$input;
+#is %F or %L first?
+if ($line=~m/%F.*%L/){
+    $file_arg=1;
+    $line_arg=2;
+}else{
+    $file_arg=2;
+    $line_arg=1;
+}
+@ %def $file_arg $line_arg $line
+
+I need to know which subexpression contains the filename or the linenumber.
+
+<<create regular expression from [[LINE]]>>=
+#strip anything up to (and including) -L
+$line=~ s/^.*-L//;
+#replace %F with something (hopefully) matching a filename
+$line=~ s/%F/\([\\w\\.]+\)/;
+#replace %L with a number
+$line=~ s/%L/\(\[0-9]\+\)/;
+#delete %N and all the rest
+$line=~ s/%N.*//;
+
+print "regex from line: $line \n" unless (! $debug);
+@
+
+Now ~ \verb+#line %L "%F"%N+~ should be transformed to~ \verb?#line ([0-9]+) "([\w.]+)"?
+
+
+\subsection{define regular expressions for error codes}
+
+We need regular expressions to recognize various error messages produced by
+various compilers. Sounds not too simple nor too pleasant, right? But there is
+help. Emacs got something called [[compile-mode]]. In there are all
+expressions we need. We just need to convert them from elisp to perl.
+
+Afterwards they get collected in [[@err]].
+
+<<emacs compile-mode>>=
+;;-*- lisp -*-
+(defvar compilation-error-regexp-alist
+  '(
+    ;; NOTE!  See also grep-regexp-alist, below.
+
+    ;; 4.3BSD grep, cc, lint pass 1:
+    ;;  /usr/src/foo/foo.c(8): warning: w may be used before set
+    ;; or GNU utilities:
+    ;;  foo.c:8: error message
+    ;; or HP-UX 7.0 fc:
+    ;;  foo.f          :16    some horrible error message
+    ;; or GNU utilities with column (GNAT 1.82):
+    ;;   foo.adb:2:1: Unit name does not match file name
+    ;;
+    ;; We'll insist that the number be followed by a colon or closing
+    ;; paren, because otherwise this matches just about anything
+    ;; containing a number with spaces around it.
+    ("\\([a-zA-Z]?:?[^:( \t\n]+\\)[:(][ \t]*\\([0-9]+\\)\\([) \t]\\|\
+:\\([^0-9\n]\\|\\([0-9]+:\\)\\)\\)" 1 2 5)
+@ 
+<<define regular expressions for error codes>>=
+$number=0;
+$err[$number] = "([a-zA-Z]?:?[^:\( \t\n]+)[:\(][ \t]*([0-9]+)".
+                "([\) \t]|:([^0-9\n]|([0-9]+:)))";
+$errf[$number] = 1;
+$errl[$number] = 2;
+print "regex $number: $err[$number]" unless (! $debug);
+@ %def $number $err $errf $errl
+
+All my [[$err]s have subexpressions pointing to filename and linenumber of the
+error. This is where [[$errf]] (filename) and [[$errl]] (linenumber) point. 
+
+<<emacs compile-mode>>=
+    ;; Microsoft C/C++:
+    ;;  keyboard.c(537) : warning C4005: 'min' : macro redefinition
+    ;;  d:\tmp\test.c(23) : error C2143: syntax error : missing ';' before 'if'
+    ;; This used to be less selective and allow characters other than
+    ;; parens around the line number, but that caused confusion for
+    ;; GNU-style error messages.
+    ;; This used to reject spaces and dashes in file names,
+    ;; but they are valudnow; so I made it more strict about the error
+    ;; message that follows.
+    ("\\(\\([a-zA-Z]:\\)?[^:(\t\n]+\\)(\\([0-9]+\\)) \
+: \\(error\\|warning\\) C[0-9]+:" 1 3)
+@ 
+<<define regular expressions for error codes>>=
+$number++;
+$err[$number] = "(\w?:[^:(\t\n]+)\(([0-9]+)\) :".
+                " (error|warning) C[0-9]+:";
+$errf[$number] = 1;
+$errl[$number] = 2;
+print "regex $number: $err[$number]" unless (! $debug);
+
+@ 
+<<emacs compile-mode>>=
+    ;; Borland C++:
+    ;;  Error ping.c 15: Unable to open include file 'sys/types.h'
+    ;;  Warning ping.c 68: Call to function 'func' with no prototype
+    ("\\(Error\\|Warning\\) \\([a-zA-Z]?:?[^:( \t\n]+\\)\
+ \\([0-9]+\\)\\([) \t]\\|:[^0-9\n]\\)" 2 3)
+
+<<define regular expressions for error codes>>=
+$number++;
+$err[$number] = "(Error|Warning) (\w?:?[^:( \t\n]+) ([0-9]+)".
+                "([) \t]|:[^0-9\n])";
+$errf[$number] = 2;
+$errl[$number] = 3;
+print "regex $number: $err[$number] \n \n" unless (! $debug);
+@ 
+%$
+
+And, because of special request
+
+From: "Martin J. Hirzel" <martinjh@rbg.informatik.tu-darmstadt.de>
+Subject: noerr meets eiffel
+To: Sven Kloppenburg <sven@rbg.informatik.tu-darmstadt.de>
+
+Hallo Sven.
+
+Ich habe vor kurzem etwas in SmallEiffel unter Linux mit noweb
+programmiert. Die dabei auftretenden Fehlermeldungen sehen so aus:
+
+Line <Zeile> column <Spalte> in <Klasse> (./<Datei>)
+
+Die werden von noerr leider nicht verstanden. Waere es vielleicht
+bitte bitte moeglich, die Art von Fehlermeldungen auch erkennbar zu
+machen?
+
+Martin
+
+<<define regular expressions for error codes>>=
+$number++;
+$err[$number] = "Line ([0-9]+) column [0-9]+ in .* \\((.*)\\)";
+$errf[$number] = 2;
+$errl[$number] = 1;
+print "regex $number: $err[$number]" unless (! $debug);
+@ 
+
+The compile mode goes on defining a couple of extra expressions used by
+compilers I never heard of. If you see error messages not supported by the
+expressions above, I will add expressions for them.
+
+But one expression remains interesting: 
+<<emacs compile-mode>>=
+;; Perl -w:
+;; syntax error at automake line 922, near "':'"
+(".* at \\([^ ]+\\) line \\([0-9]+\\)," 1 2)
+@ 
+
+<<define regular expressions for error codes>>=
+$number++;
+$err[$number] = ".* at (.*) line ([0-9]+),";
+$errf[$number] = 1;
+$errl[$number] = 2;
+print "regex $number: $err[$number]" unless (! $debug);
+@ 
+%$
+Now you can change the way your [[#LINE]] looks and still get correct error
+messages. Do you care?-)
+
+<<emacs compile-mode>>=
+  "Alist that specifies how to match errors in compiler output.
+Each elt has the form (REGEXP FILE-IDX LINE-IDX [COLUMN-IDX FILE-FORMAT...])
+If REGEXP matches, the FILE-IDX'th subexpression gives the file name, and
+the LINE-IDX'th subexpression gives the line number.  If COLUMN-IDX is
+given, the COLUMN-IDX'th subexpression gives the column number on that line.
+If any FILE-FORMAT is given, each is a format string to produce a file name to
+try; %s in the string is replaced by the text matching the FILE-IDX'th
+subexpression.")
+@
+
+
+\subsection{modify compileroutput}
+
+Now we know how to find [[line]]s and how to recognize error messages. So lets
+do it.
+
+Every line of input is scanned for error mesages. If one is found, filename an
+linenumbers are corrected. Then the line is printed on standard out.
+
+<<modify compiler-output>>=
+while(defined($in = <STDIN>)){
+    $errfound=0;
+    <<look for error messages>>
+    if($errfound==1){
+        <<replace filename and linenumber>>
+        print "error found: "  unless (! $debug);
+    } else {
+        print "nothing here: " unless (! $debug);
+    }
+    print "$in" ;
+}
+@ %def $errfound $in
+
+
+\subsection{test for error messages}
+
+The current line of input ([[$in]]) gets scanned for regular expressions from
+[[@err]]. If there is a match, this is rememberd in [[$errfound]] and
+[[$sourcefile]] and  [[$sourceline]] are set according to [[$errf]] and
+[[$errl]]. 
+
+<<look for error messages>>=
+print "entering test for error messages" unless (! $debug);
+ERRLOOP:for($number=0;$number<scalar(@err);$number++){
+    print "erloop $number \n" unless (! $debug);
+    if($in=~ m/$err[$number]/){
+        print "error matches \n" unless (! $debug);
+        $errfound=1;
+        $errf=$errf[$number];
+        $errl=$errl[$number];
+        $sourcefile=$$errf;
+        $sourceline=$$errl;
+        print "ERRORLINE: $in \n" unless (! $debug);
+        print "DEBUG: $sourcefile line $sourceline \n" unless (! $debug);
+        last ERRLOOP;
+    }
+}
+@ %def $sourcefile $sourceline
+%$
+
+I used a feature which I suspect to be an undocumented perl-feature. At least
+the Camelbook~\cite{Perl} doesn`t know about it. I'm talking about
+[[$sourcefile=$$errf;]]. What actually happens is, that [[$errf]] gets
+evaluated to a number which is subsequently used to select the correct
+subexpression from the last [[=~]] operation (here: [[$in=~
+m/$err[$number]/]]). [[$$]] usually is a special variable returning the
+process id. 
+Another possibility to solve this problem would be a big switch. Not nice.
+
+\subsection{replace linenumber and Now}
+
+filename I've got enough information to go hunting for [[line]] lines.
+Here is what comes next:
+
+\begin{enumerate}
+\item Open the [[$sourcefile]] and go to the [[$sourceline]] containing the
+  eroor.
+\item Go back to the next [[$line]] and count the distance.
+\item Take [[$nwline]] (read: the line in the noweb-file) and [[$nwfile]] (the
+  name of the noweb-file) from the [[line]] using [[$line]]
+\item Add the [[$distance]] to the [[$realline]] and \ldots Voila: the
+  original error appears
+\item and ist neatly printed out.
+\end{enumerate}
+
+Let's go:
+\begin{enumerate}
+\item  Open the [[$sourcefile]] and go to the [[$sourceline]] containing the
+  eroor.
+
+<<replace filename and linenumber>>=
+print "opening file $sourcefile \n" unless (! $debug);
+$FILE=$sourcefile;
+open FILE or die "Can't find  `$FILE' 
+                  Did you use -L correct? \n $!";
+
+<<copy [[$FILE]] up to [[$sourceline]] into [[$buffer]]>>
+close FILE;
+<<search backwards for [[$line]]>>
+<<place [[nwfile]] and [[nwline]] in the output>>
+@
+
+<<copy [[$FILE]] up to [[$sourceline]] into [[$buffer]]>>=
+$.=0;
+while(defined($buffer[$.] = <FILE> and $. <= $sourceline)){
+    $tmp=$. - 1;
+    print $.
+    print "line $tmp is $buffer[$tmp]" unless (! $debug);
+};
+$linenumber=$sourceline - 1;
+@ %def $FILE $buffer $linenumber
+
+\item Go back to the next [[$line]] and count the distance.
+
+<<search backwards for [[$line]]>>=
+print "searching for $line \n" unless (! $debug);
+$current=$linenumber;
+while($buffer[$current]!~ m/$line/){
+    if ($current<0) {
+        die "can't find LINE in file  $FILE\n";
+    };
+    print "searching: line $current is $buffer[$current] \n" unless (! $debug);
+    $current--;
+};
+@ %def $current 
+
+\item Take [[$nwline]] (read: the line in the noweb-file) and [[$nwfile]] (the
+  name of the noweb-file) from the [[line]] using [[$line]]
+
+<<search backwards for [[$line]]>>=
+print "finding: line $current ist $buffer[$current] \n" unless (! $debug);
+$line_exp_line=$buffer[$current];
+
+@ %def $line_exp_line
+
+\item Add the [[$distance]] to the [[$realline]] and \ldots Voila: the
+  original error appears
+
+<<search backwards for [[$line]]>>=
+$distance=$linenumber - $current - 1;
+
+print "distance:  $distance \n" unless (! $debug);
+@ %def $distance
+
+\item and now the new error location ist neatly fitted into the original error
+  message. 
+
+<<place [[nwfile]] and [[nwline]] in the output>>=
+$nwfile=$line_exp_line;
+$nwfile=~m/$line/;
+$nwfile=$$file_arg;
+$nwline=$$line_arg;
+$realline=$nwline+$distance;
+print "erstetze $sourcefile durch $nwfile\n" unless (! $debug);
+$in=~ s/$sourcefile/$nwfile/;
+print "ersetze $sourceline durch $realline\n" unless (! $debug);
+$in=~ s/$sourceline/$realline/;
+@ %def $nwfile $nwline $realline
+\end{enumerate}
+
+\section{Makefile}
+\label{sec:make}
+
+
+<<Makefile>>=
+#-------------------------------------------
+#Variables
+#-------------------------------------------
+
+# das kann sowieso weg
+DEFAULTCRAP = *~ *.aux *.log *.idx *.toc
+
+# das kann alles noch weg
+CRAP = noerr.html noerr.tex noerr.dvi example.java example.class hello*
+
+LATEX = latex 
+
+#--------------------------------------------
+#Targets
+#--------------------------------------------
+
+# was soll normal rauskommen?
+default: noerr.pl
+        perl -c -w noerr.pl
+
+test:   noerr.pl example.class
+
+test_eiffel: noerr.pl hello_world.e hello_world
+
+tangle: noerr.pl hello_world.e example.java Makefile
+
+weave:  noerr.tex
+
+doc:    noerr.dvi 
+
+html:   noerr.html
+
+clean:
+        rm -f $(DEFAULTCRAP) $(CRAP)
+
+#--------------------------------------------
+# Single Dependencies
+#--------------------------------------------
+
+Makefile: noerr.nw
+        notangle -L -RMakefile noerr.nw > Makefile
+
+noerr.pl: noerr.nw Makefile
+        notangle -L -Rnoerr.pl noerr.nw > noerr.pl
+
+LINEJ = -L'//line %L "%F"%N'
+example.java: noerr.nw
+        notangle $(LINEJ) -Rexample.java noerr.nw > example.java
+example.class: example.java
+        javac example.java 2>&1 | perl noerr.pl $(LINEJ)
+
+LINEE = -L'--line %L "%F"%N'
+hello_world.e: noerr.nw
+        notangle $(LINEE) -Rhello-world.e noerr.nw > hello_world.e
+
+hello_world:
+        /usr/lib/SmallEiffel/bin/compile hello_world.e 2>&1 | perl noerr.pl $(LINEE)
+        mv a.out hello_world
+noerr.dvi: noerr.tex
+
+#--------------------------------------------
+# Pattern Rules:
+#--------------------------------------------
+
+%.tex : %.nw
+        noweave -index -delay $< > $@
+
+%.html : %.nw
+        noweave -html -filter l2h -option longxref -x $< > $@
+       
+%.dvi : %.tex
+        $(LATEX) $<
+        $(LATEX) $<
+
+@ 
+
+\section{Difficulties and further development}
+
+There are a few caveats I discovered working at this project:
+\begin{itemize}
+\item If you use makes other than GNU-Make, it may be impossible to use quoted
+  hashes (like this: [[\#]]). The hash will then start a comment and the rest
+  of the line including it is lost. Thats a problem because a typical [[LINE]]
+  line looks like this:  [[LINE = -L'#line %F %L%N']] and make sees: [[LINE
+  = -L']].
+
+\item The included Makefile requires TABs. Auctex doesn't like TABs and
+  replaces them with spaces while saving the file. If you don't like this, add
+  this to your   [[~/.emacs]]:
+
+<<.emacs>>=
+(add-hook 'TeX-mode-hook '(lambda() (setq indent-tabs-mode 't)
+                          (setq TeX-auto-untabify 'nil)))
+@
+
+If you read this after your encounter with spaces in the Makefile, use [[M-x
+tabify]].
+
+\end{itemize}
+
+\section{Refinements}
+\nowebchunks
+
+\section{Variables}
+\nowebindex
+
+\begin{thebibliography}{99}
+
+\bibitem{LPFAQ} David B. Thompson (\verb+<thompson@shelob.ce.ttu.edu>+)
+  \textit{The Literate Programming FAQ }; 15 August 1997; \verb+http://shelob.ce.ttu.edu/daves/faq.html+
+
+\bibitem{Perl} Larry Wall, Tom Christiansen, Randal L. Schwartz;
+  \textit{Programming Perl}; 2.Auflage; O'Reilly 1996
+
+\bibitem{PRETZEL} Felix G\"artner;\\
+  \verb+http://www.iti.informatik.tu-darmstadt.de/~gaertner/pretzel+
+
+\bibitem{Knuth} Donald E. Knuth; \verb+http://www-cs-faculty.Stanford.EDU/~knuth/+
+
+\end{thebibliography}
+\end{document}
+%%% Local Variables:
+%%% mode: LaTeX
+%%% mmm-noweb-code-mode: perl-mode
+%%% mode: mmm
+%%% noweb-doc-mode: latex-mode
+%%% End:
