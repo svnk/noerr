@@ -52,9 +52,13 @@ some more Text.
 
 ### The Java-Code
 
-A simple `notangle -L'//line %L "%F"%N' -Rexample.java noerr.nw > example.java` leads to
+A simple 
+```
+notangle -L'//line %L "%F"%N' -Rexample.java noerr.nw > example.java
+```
+leads to
 
-'''
+```
 <the tangled example.java>=
 //line 299 "noerr.nw"
 fasel dummes Zeug;
@@ -70,7 +74,7 @@ public static void main(String argv[])
 
 Let's watch a usual compilation:
 
-'''
+```
 <Fehlermeldungen ohne noerr>=
 sven@home:/home/sven/uni/noerr > javac example.java
 example.java:3: Class or interface declaration expected.
