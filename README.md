@@ -32,25 +32,23 @@ public class example
 {
     <Main>
 }
-```
+@
 
-This code is written to a file (or else not used).
-some text
+some text between the code blocks
 
-```
 <Importe>=
 fasel dummes Zeug;
-Used below.
+@
+
 <Main>=
 public static void main(String argv[])
 {
     hier gehts schief;
 }
-Used below.
-some more Text.
-```
+@
 
-### The Java-Code
+some more Text behind the last code block.
+```
 
 A simple 
 ```
@@ -59,7 +57,6 @@ notangle -L'//line %L "%F"%N' -Rexample.java noerr.nw > example.java
 leads to
 
 ```
-<the tangled example.java>=
 //line 299 "noerr.nw"
 fasel dummes Zeug;
 //line 292 "noerr.nw"
@@ -75,7 +72,6 @@ public static void main(String argv[])
 Let's watch a usual compilation:
 
 ```
-<Fehlermeldungen ohne noerr>=
 sven@home:/home/sven/uni/noerr > javac example.java
 example.java:3: Class or interface declaration expected.
 asdkbj;
@@ -84,14 +80,11 @@ example.java:9: ';' expected.
 {hier gehts schief;}
            ^
 2 errors                               
-
-This code is written to a file (or else not used).
 ```
 
 I've got to go to example.java just to find the line-line telling me, where to look in noerr.nw. I know we can do better. Let's watch noerr at work:
 
 ```
-<Compilation with noerr>=
 cd ~/uni/noerr/
 make test
 notangle -L -RMakefile noerr.nw > Makefile
@@ -107,8 +100,6 @@ noerr.nw:303: ';' expected.
 2 errors
 
 Compilation finished at Wed Dec  9 20:01:08
-
-This code is written to a file (or else not used).
 ```
 
 This looks better, doesn't it?
