@@ -2,7 +2,7 @@
 
 ## Introduction
 
-You're reading the documentation for noerr. noerr is a tool, helping you to use noerr with programming languages that don't understand `#line` commands. I assume that you understood this sentence. If not, read about literate programming, noweb, and try to use it with e.g. Java.
+You're reading the documentation for noerr. noerr is a tool, helping you to use noweb with programming languages that don't understand `#line` commands. I assume that you understood this sentence. If not, read about literate programming, noweb, and try to use it with e.g. Java.
 
 ## General Description
 
