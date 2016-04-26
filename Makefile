@@ -1,4 +1,4 @@
-#line 567 "noerr.nw"
+#line 582 "noerr.nw"
 #-------------------------------------------
 #Variables
 #-------------------------------------------
@@ -38,10 +38,7 @@ clean:
 # Single Dependencies
 #--------------------------------------------
 
-Makefile: noerr.nw
-	notangle -L -RMakefile noerr.nw > Makefile
-
-noerr.pl: noerr.nw Makefile
+noerr.pl: noerr.nw
 	notangle -L -Rnoerr.pl noerr.nw > noerr.pl
 
 LINEJ = -L'//line %L "%F"%N'
