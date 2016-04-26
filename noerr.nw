@@ -188,7 +188,7 @@ end -- HELLO_WORLD
 I will first present an outline for the programm which I will refine step by
 step. 
 
-For each line of input (I get comlier-output piped to standard in, remember?) I need to do three things:
+For each line of input (I get compiler-output piped to standard in, remember?) I need to do three things:
 
 \begin{enumerate}
 \item recognize the error code (if there is one)
@@ -260,7 +260,7 @@ $line=~ s/%F/\([\\w\\.]+\)/;
 #replace %L with a number
 $line=~ s/%L/\(\[0-9]\+\)/;
 #delete %N and all the rest
-$line=~ s/%N.*//;
+$line=~ s/%N//;
 
 print "regex from line: $line \n" unless (! $debug);
 @
@@ -375,6 +375,21 @@ $errf[$number] = 2;
 $errl[$number] = 1;
 print "regex $number: $err[$number]" unless (! $debug);
 @ 
+
+one more from Norman Ramsey:
+
+Mosow ML has errors of the form
+
+File "uclu.sml", line 4201, characters 23-75:
+<<define regular expressions for error codes>>=
+$number++;
+$err[$number] = 'File "(.*)", line ([0-9]+), characters [0-9]+-[0-9]+:';
+$errf[$number] = 1;
+$errl[$number] = 2;
+print "regex $number: $err[$number]" unless (! $debug);
+@ 
+
+
 
 The compile mode goes on defining a couple of extra expressions used by
 compilers I never heard of. If you see error messages not supported by the
