@@ -27,7 +27,7 @@ tangle: noerr.pl hello_world.e example.java Makefile
 
 weave:	noerr.tex
 
-doc:	noerr.dvi 
+doc:	noerr.pdf 
 
 html:	noerr.html
 
@@ -69,4 +69,8 @@ noerr.dvi: noerr.tex
 %.dvi : %.tex
 	$(LATEX) $<
 	$(LATEX) $<
+
+%.pdf : %.tex
+	pdflatex $<
+	pdflatex $<
 
