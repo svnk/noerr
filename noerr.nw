@@ -388,6 +388,15 @@ $errf[$number] = 1;
 $errl[$number] = 2;
 print "regex $number: $err[$number]" unless (! $debug);
 @ 
+For ``bridge languages'' from \emph{Programming Languages: Build,
+Prove, and Compare}.
+<<define regular expressions for error codes>>=
+$number++;
+$err[$number] = '(syntax|type|run-time) error in (.*), line ([0-9]+):';
+$errf[$number] = 2;
+$errl[$number] = 3;
+print "regex $number: $err[$number]" unless (! $debug);
+@
 
 
 
