@@ -255,6 +255,22 @@ I need to know which subexpression contains the filename or the linenumber.
 <<create regular expression from [[LINE]]>>=
 #strip anything up to (and including) -L
 $line=~ s/^.*-L//;
+@
+To convert the [[-L]] argument to a regular expression, we must first
+escape any Perl metacharacters.
+\begin{itemize}
+\item
+The metacharacters are [[{}[]()^$.|*+?\]].
+\item
+The special characters for a character class are [[-]\^$]].
+\end{itemize}
+<<create regular expression from [[LINE]]>>=
+#escape any Perl metacharacters
+$line=~ s/([\]{}[()\^\$.|*+?\\])/\\$1/g;
+@
+Now [[%F]] and [[%L]] can be replaced with suitable regular
+expressions, and the [[%N]] stripped.
+<<create regular expression from [[LINE]]>>=
 #replace %F with something (hopefully) matching a filename
 $line=~ s/%F/\([\\w\\.]+\)/;
 #replace %L with a number
