@@ -1,15 +1,10 @@
-%$Id: noerr.nw,v 1.1 2003/04/16 11:42:40 sven Exp sven $
+%$Id: noerr.nw,v 1.1 2003/04/16 11:42:40 sven Exp sven $ 
 %
+% to read the docs
 %
-%
-%
-% first extract Makefile:
-%
-%  notangle -L  -RMakefile noerr.nw > Makefile
-%
-% then do make doc
-% and xdvi noerr.dvi
-%
+% make doc
+% 
+% and read noerr.pdf
 %
 % if you want to edit this file, watch your emacs. If tabs are converted 
 % to spaces, the Makefile gets unusable. I extended my ~/.emacs like this:
@@ -55,6 +50,7 @@ noweb-generated files to pointing to noweb-files. It does so by emulating the
 [[#line]] command of C as close als poosible while retaining flexibility.
 
 If you put the option -L on the noweb-commandline, it expands to \verb+#line %L "%F"%N+  
+
 
 This option inserts [[#line]] lines to point errors from included header-files
 back into the original. I'm going to do the same for tracing errors in
@@ -197,17 +193,21 @@ For each line of input (I get compiler-output piped to standard in, remember?) I
 \end{enumerate}
 
 <<noerr.pl>>=
-#$debug="TRUE";#$
+<<import packages>>
+
+#my $debug="FALSE";#$
+my $errfound=0;
 <<read [[LINE]] from stdin>>
 <<create regular expression from [[LINE]]>>
 <<define regular expressions for error codes>>
 <<modify compiler-output>>
+exit $errfound if $reporterrors;
 @ %def $debug 
 %$ for emacs - highlighting
 
-You might wonder why I  have to [[create regular expression from
-[[LINE]]]]. This is because the commandline looks like [[ -L'//line %L %F%N']]
-and the [[LINE]]s in source code look like  [[//line 299 创noerr.nw创]]. 
+You might wonder why I have to [[create regular expression from [[LINE]]]].
+This is because the commandline looks like [[ -L'//line %L %F%N']]
+and the [[LINE]]s in source code look like [[//line 299 创noerr.nw创]].
 
 \subsection{parse the commandline}
 
@@ -217,29 +217,28 @@ commandline-option. This is necessary because without the ability of
 recognizing [[LINE]] commands, it is impossible to trace the error back to the
 [[noweb]]-file.
 
-<<read [[LINE]] from stdin>>=
-foreach $input_part (@ARGV){
-    $input.=$input_part;
-}
-@ %def $input
-
-I rebuild the commandline. I get just one option, so there is no need for
-sophistication. Maybe later.
-
-<<read [[LINE]] from stdin>>=
-if(not ($input=~ m/-L/)){
-    die "I need -L line as option\n see also noweb(1)";
-} 
-$input=substr($input,2);
-print "$input\n" unless (! $debug);
+<<import packages>>=
+use Getopt::Long;
+use Pod::Usage;
 @
 
+<<read [[LINE]] from stdin>>=
+my $linearg = '';
+my $reporterrors = '';
+Getopt::Long::Configure ("bundling");
+GetOptions ('L=s' => \$linearg, 'reporterrors|E' => \$reporterrors);
+@ %def $input
+
+Using getopt-long, persing the commandline switches is easy. -L carrys the
+[[LINE]] directive and -E tells [[noerr]] to exit with 1 if any compiler error
+is detected.
 
 \subsection{create regular expression from [[LINE]]}
 
+I need to know which subexpression contains the filename or the linenumber.
+
 <<create regular expression from [[LINE]]>>= 
-#copy the commandline
-$line=$input;
+$line=$linearg;
 #is %F or %L first?
 if ($line=~m/%F.*%L/){
     $file_arg=1;
@@ -250,12 +249,7 @@ if ($line=~m/%F.*%L/){
 }
 @ %def $file_arg $line_arg $line
 
-I need to know which subexpression contains the filename or the linenumber.
 
-<<create regular expression from [[LINE]]>>=
-#strip anything up to (and including) -L
-$line=~ s/^.*-L//;
-@
 To convert the [[-L]] argument to a regular expression, we must first
 escape any Perl metacharacters.
 \begin{itemize}
@@ -270,6 +264,7 @@ $line=~ s/([\]{}[()\^\$.|*+?\\])/\\$1/g;
 @
 Now [[%F]] and [[%L]] can be replaced with suitable regular
 expressions, and the [[%N]] stripped.
+
 <<create regular expression from [[LINE]]>>=
 #replace %F with something (hopefully) matching a filename
 $line=~ s/%F/\([\\w\\.]+\)/;
@@ -460,7 +455,6 @@ linenumbers are corrected. Then the line is printed on standard out.
 
 <<modify compiler-output>>=
 while(defined($in = <STDIN>)){
-    $errfound=0;
     <<look for error messages>>
     if($errfound==1){
         <<replace filename and linenumber>>
@@ -598,87 +592,6 @@ print "ersetze $sourceline durch $realline\n" unless (! $debug);
 $in=~ s/$sourceline/$realline/;
 @ %def $nwfile $nwline $realline
 \end{enumerate}
-
-\section{Makefile}
-\label{sec:make}
-
-
-<<Makefile>>=
-#-------------------------------------------
-#Variables
-#-------------------------------------------
-
-# das kann sowieso weg
-DEFAULTCRAP = *~ *.aux *.log *.idx *.toc
-
-# das kann alles noch weg
-CRAP = noerr.html noerr.tex noerr.dvi example.java example.class hello*
-
-LATEX = latex 
-
-#--------------------------------------------
-#Targets
-#--------------------------------------------
-
-# was soll normal rauskommen?
-default: noerr.pl
-        perl -c -w noerr.pl
-
-test:   noerr.pl example.class
-
-test_eiffel: noerr.pl hello_world.e hello_world
-
-tangle: noerr.pl hello_world.e example.java Makefile
-
-weave:  noerr.tex
-
-doc:    noerr.dvi 
-
-html:   noerr.html
-
-clean:
-        rm -f $(DEFAULTCRAP) $(CRAP)
-
-#--------------------------------------------
-# Single Dependencies
-#--------------------------------------------
-
-Makefile: noerr.nw
-        notangle -L -RMakefile noerr.nw > Makefile
-
-noerr.pl: noerr.nw Makefile
-        notangle -L -Rnoerr.pl noerr.nw > noerr.pl
-
-LINEJ = -L'//line %L "%F"%N'
-example.java: noerr.nw
-        notangle $(LINEJ) -Rexample.java noerr.nw > example.java
-example.class: example.java
-        javac example.java 2>&1 | perl noerr.pl $(LINEJ)
-
-LINEE = -L'--line %L "%F"%N'
-hello_world.e: noerr.nw
-        notangle $(LINEE) -Rhello-world.e noerr.nw > hello_world.e
-
-hello_world:
-        /usr/lib/SmallEiffel/bin/compile hello_world.e 2>&1 | perl noerr.pl $(LINEE)
-        mv a.out hello_world
-noerr.dvi: noerr.tex
-
-#--------------------------------------------
-# Pattern Rules:
-#--------------------------------------------
-
-%.tex : %.nw
-        noweave -index -delay $< > $@
-
-%.html : %.nw
-        noweave -html -filter l2h -option longxref -x $< > $@
-       
-%.dvi : %.tex
-        $(LATEX) $<
-        $(LATEX) $<
-
-@ 
 
 \section{Difficulties and further development}
 
